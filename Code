@@ -1,0 +1,113 @@
+import sqlite3
+import tkinter as tk
+from tkinter import messagebox
+from datetime import datetime
+import os
+
+# ---------- Create DB and Table ----------
+def initialize_database():
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS fruits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        price_per_kg REAL NOT NULL,
+        quantity_kg INTEGER DEFAULT 50
+    )
+    """)
+
+    # Add fruits only if table is empty
+    c.execute("SELECT COUNT(*) FROM fruits")
+    if c.fetchone()[0] == 0:
+        fruits_data = [
+            ("Apple", 180),
+            ("Banana", 40),
+            ("Mango", 120),
+            ("Orange", 80),
+            ("Papaya", 45)
+        ]
+        c.executemany("INSERT INTO fruits (name, price_per_kg) VALUES (?, ?)", fruits_data)
+
+    conn.commit()
+    conn.close()
+
+
+# ---------- Fetch Fruits ----------
+def get_fruits():
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute("SELECT id, name, price_per_kg FROM fruits")
+    fruits = c.fetchall()
+    conn.close()
+    return fruits
+
+
+# ---------- Calculate and Show Bill ----------
+def calculate_bill():
+    total = 0
+    bill_lines = []
+    for var, qty_var, fruit in zip(check_vars, qty_vars, fruits):
+        if var.get():
+            try:
+                qty = float(qty_var.get())
+                if qty <= 0:
+                    continue
+                name = fruit[1]
+                price = fruit[2]
+                subtotal = qty * price
+                total += subtotal
+                bill_lines.append(f"{name} ({qty} kg @ ₹{price}/kg) = ₹{subtotal}")
+            except ValueError:
+                messagebox.showerror("Input Error", "Enter valid quantity")
+                return
+
+    if not bill_lines:
+        messagebox.showinfo("Empty", "No fruits selected.")
+        return
+
+    now = datetime.now()
+    today = now.strftime("%d-%m-%Y")
+    current_time = now.strftime("%I:%M %p")  # 12-hour format with AM/PM
+
+    bill_text = f"🛒 DAILY MARKET\nDate: {today}  Time: {current_time}\n\n" + \
+                "\n".join(bill_lines) + f"\n\nTotal: ₹{total}"
+    bill_label.config(text=bill_text)
+
+
+# ---------- Clear All Selections ----------
+def clear_all():
+    for var in check_vars:
+        var.set(False)
+    for qty in qty_vars:
+        qty.set("0")
+    bill_label.config(text="")
+
+# ---------- MAIN ----------
+initialize_database()
+
+root = tk.Tk()
+root.title("Daily Market Billing System")
+
+fruits = get_fruits()
+check_vars = []
+qty_vars = []
+
+tk.Label(root, text="Select Fruits & Quantity (kg)", font=("Arial", 14)).grid(row=0, columnspan=3)
+
+for i, fruit in enumerate(fruits):
+    var = tk.BooleanVar()
+    qty = tk.StringVar(value="0")
+    check_vars.append(var)
+    qty_vars.append(qty)
+
+    tk.Checkbutton(root, text=f"{fruit[1]} (₹{fruit[2]}/kg)", variable=var).grid(row=i+1, column=0, sticky="w")
+    tk.Entry(root, textvariable=qty, width=5).grid(row=i+1, column=1)
+
+tk.Button(root, text="Generate Bill", command=calculate_bill).grid(row=len(fruits)+1, column=0, pady=10)
+tk.Button(root, text="Clear All", command=clear_all).grid(row=len(fruits)+1, column=1, pady=10)
+
+bill_label = tk.Label(root, text="", font=("Courier", 10), justify="left", bg="white", anchor="nw", width=40, height=20)
+bill_label.grid(row=0, column=3, rowspan=len(fruits)+2, padx=20, pady=10)
+
+root.mainloop()
